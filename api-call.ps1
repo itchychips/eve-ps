@@ -369,22 +369,29 @@ function Create-EsiSavedMarketOrderTable {
     $DataSource = Resolve-Path $DataSource
     # I still can't believe I got all the types right here without
     # documentation.
+
+    # Note: If you use only INT, it will wrap a long int big enough to a
+    # negative.  Fun little weird bug.  Always use INTEGER.
+    #
+    # You can test this weird phenomenon by doing this command:
+    #
+    #     Invoke-SqliteQuery -DataSource ":MEMORY:" -Query "CREATE TABLE test (id INT, id2 INTEGER); INSERT INTO test (id, id2) VALUES (@id, @id); SELECT * FROM test;" -SqlParameters @{"id"=1029209158478}
     Invoke-SqliteQuery -DataSource $DataSource -Query "
         CREATE TABLE IF NOT EXISTS market_order (
-            OrderId INT PRIMARY KEY,
-            Duration INT,
-            IsBuyOrder INT,
+            OrderId INTEGER PRIMARY KEY,
+            Duration INTEGER,
+            IsBuyOrder INTEGER,
             Issued DATETIME,
-            LocationId INT,
-            MinVolume INT,
+            LocationId INTEGER,
+            MinVolume INTEGER,
             Price DECIMAL,
-            Range INT,
-            SystemId INT,
-            TypeId INT,
+            Range INTEGER,
+            SystemId INTEGER,
+            TypeId INTEGER,
             TypeName STRING,
             TypeVolume DECIMAL,
-            VolumeRemain INT,
-            VolumeTotal INT
+            VolumeRemain INTEGER,
+            VolumeTotal INTEGER
         );"
 }
 
