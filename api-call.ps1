@@ -299,11 +299,12 @@ function Convert-PSObjectProperty {
 
 #curl -X POST "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility&language=en" -H  "accept: application/json" -H  "Accept-Language: en" -H  "Content-Type: application/json" -H  "Cache-Control: no-cache" -d "[  \"Jita\", \"Amarr\", \"Rens\", \"Dodixie\", \"Hek\"]"
 
-$tradeHubSearchResult = Search-EsiId "Jita","Amarr","Rens","Dodixie","Hek"
-$tradeHubs = $tradeHubSearchResult.systems
-
-$alloyedExample = Search-EsiItem "Alloyed Tritanium Bar" | Get-EsiMarketOrder -SystemName Jita
-
 # TODO: Get all Salvaged Materials items, loop over them, and pull all market orders in all regions.
 
 #curl -X GET "https://esi.evetech.net/latest/universe/categories/?datasource=tranquility" -H  "accept: application/json" -H  "Cache-Control: no-cache"
+
+# Some scratchy stuff
+#$tradeHubSearchResult = Search-EsiId "Jita","Amarr","Rens","Dodixie","Hek"
+#$tradeHubs = $tradeHubSearchResult.systems
+#
+#$alloyedExample = Search-EsiItem "Alloyed Tritanium Bar" | Get-EsiMarketOrder -SystemName Jita
