@@ -46,55 +46,57 @@ function Invoke-WebRequest2 {
         #[string]$JsonBody
     )
 
+    $result = $null
+
     $now = Get-Date
     if ($CacheExpiry[$Uri] -and ($now -lt $CacheExpiry[$Uri])) {
-        Write-Verbose "Currently before expiry.  Returning cached response."
-        $result = $CacheResponse[$Uri].Content | ConvertFrom-Json | Convert-PSObjectProperty
-    }
-
-    $headers = @{
-            "Accept-Language"="en"
-            "Content-Type"="application/json"
-            "Accept"="application/json"
-        }
-
-    # This is a bit hard to use, but would be good to use it later if we
-    # industrialize this.
-    if ($CacheETag[$Uri]) {
-        $headers["If-None-Match"] = $CacheETag[$Uri]
-    }
-
-    $params = @{
-        "UseBasicParsing"=$true
-        "Headers"=$headers
-        "Uri"=$Uri
-        "Method"=$Method
-    }
-
-    #if ($JsonBody) {
-    #    $params["Body"] = $JsonBody
-    #}
-    if ($Body) {
-        $params["Body"] = ConvertTo-Json -InputObject $Body
-    }
-    elseif ($ArrayBody) {
-        $params["Body"] = ConvertTo-Json -InputObject $ArrayBody
-    }
-
-    try {
-        $result = Invoke-WebRequest @params
-        $global:LastHeaders = $result.Headers
-    }
-    catch {
-        # For some reason they decided that 304 was an exceptional status...
-        # Wonderful.  Spoiler: It's not, and throwing an exception here is
-        # incredibly ridiculous.
-        if ($_.Exception.Response.StatusCode -ne "NotModified") {
-            throw
-        }
-        Write-Verbose "Got 304 status.  Using cached response."
+        Write-Verbose "Currently before expiry for '$Uri'.  Returning cached response."
         $result = $CacheResponse[$Uri]
-        $global:LastHeaders = $_.Exception.Response.Headers
+    }
+
+    if (-not $result) {
+        $headers = @{
+                "Accept-Language"="en"
+                "Content-Type"="application/json"
+                "Accept"="application/json"
+            }
+
+        if ($CacheETag[$Uri]) {
+            $headers["If-None-Match"] = $CacheETag[$Uri]
+        }
+
+        $params = @{
+            "UseBasicParsing"=$true
+            "Headers"=$headers
+            "Uri"=$Uri
+            "Method"=$Method
+        }
+
+        #if ($JsonBody) {
+        #    $params["Body"] = $JsonBody
+        #}
+        if ($Body) {
+            $params["Body"] = ConvertTo-Json -InputObject $Body
+        }
+        elseif ($ArrayBody) {
+            $params["Body"] = ConvertTo-Json -InputObject $ArrayBody
+        }
+
+        try {
+            $result = Invoke-WebRequest @params
+            $global:LastHeaders = $result.Headers
+        }
+        catch {
+            # For some reason they decided that 304 was an exceptional status...
+            # Wonderful.  Spoiler: It's not, and throwing an exception here is
+            # incredibly ridiculous.
+            if ($_.Exception.Response.StatusCode -ne "NotModified") {
+                throw
+            }
+            Write-Verbose "Got 304 status for '$Uri'.  Using cached response."
+            $result = $CacheResponse[$Uri]
+            $global:LastHeaders = $_.Exception.Response.Headers
+        }
     }
 
 
@@ -113,7 +115,7 @@ function Invoke-WebRequest2 {
     }
 
     if ($result.Headers["X-Pages"] -and -not $IgnorePages) {
-        Write-Verbose "X-Pages header present.  Getting everything."
+        Write-Verbose "X-Pages header present for '$Uri'.  Getting everything."
         $currentPage = 2
         [int]$maxPage = $result.Headers["X-Pages"]
         for ($currentPage = 2; $currentPage -le $maxPage; $currentPage++) {
