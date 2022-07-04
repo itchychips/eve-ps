@@ -1,0 +1,9 @@
+= Eve-PS README
+
+== Introduction
+
+This is just a bunch of PowerShell cmdlets that interface with https://esi.evetech.net/ui/#/[Eve's ESI].
+
+== License
+
+See xref:LICENSE.adoc[] for the primary license for this repository.
