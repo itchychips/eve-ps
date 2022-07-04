@@ -364,11 +364,15 @@ function Create-EsiSavedMarketOrderTable {
     [CmdletBinding()]
     Param(
         [parameter()]
-        [string]$DataSource="saved.sqlite"
+        [string]$DataSource="saved.sqlite",
+        [parameter()]
+        [switch]$Clobber
     )
     $DataSource = Resolve-Path $DataSource
-    # I still can't believe I got all the types right here without
-    # documentation.
+    if ($Clobber) {
+    Invoke-SqliteQuery -DataSource $DataSource -Query "
+        DROP TABLE IF EXISTS market_order;"
+    }
 
     # Note: If you use only INT, it will wrap a long int big enough to a
     # negative.  Fun little weird bug.  Always use INTEGER.
@@ -376,6 +380,9 @@ function Create-EsiSavedMarketOrderTable {
     # You can test this weird phenomenon by doing this command:
     #
     #     Invoke-SqliteQuery -DataSource ":MEMORY:" -Query "CREATE TABLE test (id INT, id2 INTEGER); INSERT INTO test (id, id2) VALUES (@id, @id); SELECT * FROM test;" -SqlParameters @{"id"=1029209158478}
+    #
+    # I still can't believe I got all the types right here without
+    # documentation.
     Invoke-SqliteQuery -DataSource $DataSource -Query "
         CREATE TABLE IF NOT EXISTS market_order (
             OrderId INTEGER PRIMARY KEY,
