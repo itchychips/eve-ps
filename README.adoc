@@ -6,4 +6,4 @@ This is just a bunch of PowerShell cmdlets that interface with https://esi.evete
 
 == License
 
-See xref:LICENSE.adoc[] for the primary license for this repository.
+See xref:COPYING.adoc[] for the primary terms of copying for this repository.
