@@ -1,2 +1,3 @@
 *.swp
 *.sqlite
+secrets.ps1
