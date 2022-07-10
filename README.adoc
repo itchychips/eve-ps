@@ -30,6 +30,10 @@ After that, you should be A-OK to run the commands.
 
 To login, run `Invoke-EsiLogin`.
 
+== Known issues
+
+For some reason, tab and menu completion in PowerShell 5 stops working if anything uses PoshRSJob is run.  This problem does not seem to exist in PowerShell 7.  It is therefore recommended to use PowerShell 7.
+
 == Other tries
 
 I tried using https://github.com/Azure/autorest[AutoRest], but it had compile issues after generating from the https://esi.evetech.net/latest/swagger.json[swagger file].
