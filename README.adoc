@@ -8,6 +8,10 @@ This is just a bunch of PowerShell cmdlets that interface with https://esi.evete
 
 See xref:COPYING.adoc[] for the primary terms of copying for this repository.
 
+== Dependencies
+
+Requires https://github.com/RamblingCookieMonster/PSSQLite[PSSQLite] and https://github.com/proxb/PoshRSJob[PoshRSJob].
+
 == Getting Started
 
 Overall steps:
