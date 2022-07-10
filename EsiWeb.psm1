@@ -167,12 +167,30 @@ function Invoke-WebRequest2 {
         }
 
         try {
-            $result = Invoke-WebRequest @params
-            $transformedResult = New-Object -Type PSObject
-            $transformedResult | Add-Member -Type NoteProperty -Name "Headers" -Value $result.Headers
-            $transformedResult | Add-Member -Type NoteProperty -Name "Content" -Value $result.Content
-            $result = $transformedResult | ConvertTo-Json | ConvertFrom-Json
-            $global:LastHeaders = $result.Headers
+            $retryCount = 0
+            while ($true) {
+                try {
+                    $result = Invoke-WebRequest @params
+                }
+                catch {
+                    if ($_.Exception.Response.StatusCode -eq "NotModified") {
+                        throw
+                    }
+                    elseif ($retryCount -lt 3) {
+                        # Sometimes intermittent connections can happen.  I've seen a 502 error a few times during these calls, so we'll do some hardcoded retry logic to compensate here.
+                        $retryCount++
+                        Write-Warning "Error occurred: $_.  Retry $retryCount of 3."
+                        continue
+                    }
+                    throw
+                }
+                $transformedResult = New-Object -Type PSObject
+                $transformedResult | Add-Member -Type NoteProperty -Name "Headers" -Value $result.Headers
+                $transformedResult | Add-Member -Type NoteProperty -Name "Content" -Value $result.Content
+                $result = $transformedResult | ConvertTo-Json | ConvertFrom-Json
+                $global:LastHeaders = $result.Headers
+                break
+            }
         }
         catch {
             if ($_.Exception.GetType().Name -eq "UriFormatException") {
