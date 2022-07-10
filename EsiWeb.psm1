@@ -241,7 +241,8 @@ function Invoke-WebRequest2 {
     $response | Add-Member -Type NoteProperty -Name "Headers" -Value $result.Headers
     $response | Add-Member -Type NoteProperty -Name "Content" -Value $result.Content
 
-    $expiry = Get-Date $result.Headers.Expires -Format o
+    # Headers are Dictionary<String,IEnumerable<String>> now, apparently.  not just Dictionary<String,String>
+    $expiry = Get-Date $result.Headers.Expires[0] -Format o
     Invoke-SqliteQuery -SqliteConnection $connection -Query "
         UPDATE cache_web
         SET Expiry = @Expiry,
@@ -263,7 +264,7 @@ function Invoke-WebRequest2 {
     if (($result.Headers | Test-Member -MemberName "X-Pages") -and -not $IgnorePages) {
         Write-Verbose "X-Pages header present for '$Uri'.  Getting everything."
         $currentPage = 2
-        [int]$maxPage = $result.Headers."X-Pages"
+        [int]$maxPage = $result.Headers."X-Pages"[0]
         for ($currentPage = 2; $currentPage -le $maxPage; $currentPage++) {
             #Write-Progress -Activity "Getting market orders" -Status "$currentPage/$maxPage gotten:" -PercentComplete ([float]$currentPage/[float]$maxPage)
             Invoke-WebRequest2 -Uri "${Uri}?page=$currentPage" -IgnorePages
