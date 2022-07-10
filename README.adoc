@@ -7,3 +7,21 @@ This is just a bunch of PowerShell cmdlets that interface with https://esi.evete
 == License
 
 See xref:COPYING.adoc[] for the primary terms of copying for this repository.
+
+== Getting Started
+
+Overall steps:
+
+.  Add an application on the https://developers.eveonline.com/[Eve Developers portal]
+.. Give a good name (such as Eve-PS)
+.. A short description (such as "Access ESI via PowerShell")
+.. Set Connection Type to Authentication & API Access with the scope "esi-universe.read_structures.v1" (needed to read market orders inside structures you can dock with).
+.. Set the callback URL to "++http://localhost:64782/++"
+.. Click Create Application
+. Open your application settings in the EVE Developers portal
+. Copy secrets.example.ps1 to secrets.ps1
+. In secrets.ps1, set $global:EsiClientId to your Client ID
+
+After that, you should be A-OK to run the commands.
+
+To login, run `Invoke-EsiLogin`.
