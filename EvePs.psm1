@@ -364,40 +364,61 @@ function Sync-EsiGroup {
                 CategoryId INTEGER,
                 GroupId INTEGER PRIMARY KEY,
                 Name STRING,
-                Published INTEGER);
-                "
+                Published INTEGER);"
 
         $groupIds = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/"
+        $uniqueGroupIds = $groupIds | Select-Object -Unique
+        $compared = Compare-Object -ReferenceObject $uniqueGroupIds -DifferenceObject $groupIds
+        $compared | ForEach-Object {
+            Write-Warning "Duplicate group ID: $_"
+        }
+        Write-Verbose "Got $($groupIds.Count) group IDs."
         $evePsModulePath = Get-Module EvePs | Select-Object -Expand Path
 
+        # Useful for debugging PoshRSJob
         #if ($Limit) {
         #    $groupIds = $groupIds | Select-Object -First $Limit
         #}
 
         $baseUri = $global:EsiBaseUri
-        $groupIds | Start-RSJob -Throttle 100 -ModulesToImport $evePsModulePath -ScriptBlock {
+        $jobs = $groupIds | Start-RSJob -Throttle 100 -ModulesToImport $evePsModulePath -ScriptBlock {
             $global:EvePsSqliteConnection = $using:connection
             $group = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/$_/"
+            # INSERT OR REPLACE for some reason didn't insert all the IDs, so
+            # we use the UPSERT syntax instead.
             Invoke-SqliteQuery -SQLiteConnection $using:connection -Query "
-                INSERT OR REPLACE INTO [group] (
+                INSERT INTO [group] (
                     CategoryId,
                     GroupId,
                     Name,
                     Published
                 ) VALUES (
                     @CategoryId,
-                    (SELECT GroupId FROM [group] WHERE GroupId = @GroupId),
+                    @GroupId,
                     @Name,
-                    @Published);" -SqlParameters @{
+                    @Published)
+                ON CONFLICT(GroupId) DO
+                UPDATE SET
+                    CategoryId=@CategoryId,
+                    Name=@Name,
+                    Published=@Published;" -SqlParameters @{
                         "CategoryId"=$group.CategoryId
                         "GroupId"=$group.GroupId
                         "Name"=$group.Name
                         "Published"=$group.Published
                     }
-        } | Wait-RSJob -ShowProgress | Receive-RSJob
+        }
+        Write-Verbose "Started $($jobs.Count) jobs."
+        $jobs = $jobs | Wait-RSJob -ShowProgress
+        $jobs | Receive-RSJob
+        $jobs | Remove-RSJob
 
         $transaction.Commit()
         $transaction = $null
+        $count = Invoke-SqliteQuery -SqliteConnection $connection -Query "
+            SELECT COUNT(*) AS Count
+            FROM [group];" | Select-Object -Expand Count
+        Write-Verbose "There are now $count group IDs into database."
     }
     catch {
         if ($transaction) {
