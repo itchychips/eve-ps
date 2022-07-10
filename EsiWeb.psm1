@@ -4,6 +4,8 @@ Param(
     [switch]$ClearCache
 )
 
+Import-Module .\EvePsUtil.psm1
+
 $global:EsiBaseUri = "https://esi.evetech.net/latest"
 
 $ErrorActionPreference = "Stop"
@@ -12,28 +14,14 @@ Set-StrictMode -Version Latest
 
 [System.Net.ServicePointManager]::SecurityProtocol = "Tls12"
 
-function Test-Member {
-    [CmdletBinding()]
-    Param(
-        [parameter(Mandatory)]
-        [string]$MemberName,
-        [parameter(Mandatory,ValueFromPipeline)]
-        [Object]$InputObject
-    )
-
-    (Get-Member -InputObject $InputObject | Where-Object { $_.Name -eq $MemberName }) -ne $null
-}
-
 function Clear-Cache {
     [CmdletBinding()]
     Param(
-        [parameter()]
-        [string]$DataSource="saved.sqlite"
     )
 
-    $DataSource = Resolve-Path $DataSource
+    $connection = Open-EvePsDataConnection
 
-    Invoke-SqliteQuery -DataSource $DataSource -Query "
+    Invoke-SqliteQuery -SqliteConnection $connection -Query "
         DROP TABLE IF EXISTS cache_web;
         DROP TABLE IF EXISTS cache_etag;
 
@@ -106,8 +94,6 @@ function Invoke-WebRequest2 {
         [parameter()]
         [switch]$IgnorePages,
         [parameter()]
-        [string]$DataSource="saved.sqlite",
-        [parameter()]
         [switch]$IgnoreExpiry,
         [parameter()]
         [switch]$IgnoreETag
@@ -115,12 +101,14 @@ function Invoke-WebRequest2 {
         #[string]$JsonBody
     )
 
-    $DataSource = Resolve-Path $DataSource
+    Write-Verbose "$Method on endpoint '$Uri'."
+
+    $connection = Open-EvePsDataConnection
 
     $result = $null
 
     $now = Get-Date
-    $cacheEntry = Invoke-SqliteQuery -DataSource $DataSource -Query "
+    $cacheEntry = Invoke-SqliteQuery -SqliteConnection $connection -Query "
         SELECT CacheWebId, Response, ETag, Expiry
         FROM cache_web
         WHERE Uri = @Uri;" -SqlParameters @{
@@ -170,7 +158,7 @@ function Invoke-WebRequest2 {
             $transformedResult = New-Object -Type PSObject
             $transformedResult | Add-Member -Type NoteProperty -Name "Headers" -Value $result.Headers
             $transformedResult | Add-Member -Type NoteProperty -Name "Content" -Value $result.Content
-            $result = $transformedResult
+            $result = $transformedResult | ConvertTo-Json | ConvertFrom-Json
             $global:LastHeaders = $result.Headers
         }
         catch {
@@ -193,7 +181,7 @@ function Invoke-WebRequest2 {
     }
 
     if (-not $cacheEntry) {
-        Invoke-SqliteQuery -DataSource $DataSource -Query "
+        Invoke-SqliteQuery -SqliteConnection $connection -Query "
             INSERT INTO cache_web (
                 Uri,
                 Response,
@@ -210,7 +198,7 @@ function Invoke-WebRequest2 {
     }
 
     if ($result.Headers | Test-Member -MemberName ETag) {
-        Invoke-SqliteQuery -DataSource $DataSource -Query "
+        Invoke-SqliteQuery -SqliteConnection $connection -Query "
             UPDATE cache_web
             SET ETag = @ETag
             WHERE Uri = @Uri;" -SqlParameters @{
@@ -223,7 +211,7 @@ function Invoke-WebRequest2 {
     $response | Add-Member -Type NoteProperty -Name "Content" -Value $result.Content
 
     $expiry = Get-Date $result.Headers.Expires -Format o
-    Invoke-SqliteQuery -DataSource $DataSource -Query "
+    Invoke-SqliteQuery -SqliteConnection $connection -Query "
         UPDATE cache_web
         SET Expiry = @Expiry,
             Response = @Response
@@ -241,12 +229,12 @@ function Invoke-WebRequest2 {
         $output
     }
 
-    if (($result | Test-Member -MemberName "X-Pages") -and -not $IgnorePages) {
+    if (($result.Headers | Test-Member -MemberName "X-Pages") -and -not $IgnorePages) {
         Write-Verbose "X-Pages header present for '$Uri'.  Getting everything."
         $currentPage = 2
-        [int]$maxPage = $result."X-Pages"
+        [int]$maxPage = $result.Headers."X-Pages"
         for ($currentPage = 2; $currentPage -le $maxPage; $currentPage++) {
-            Write-Progress -Activity "Getting market orders" -Status "$currentPage/$maxPage gotten:" -PercentComplete ([float]$currentPage/[float]$maxPage)
+            #Write-Progress -Activity "Getting market orders" -Status "$currentPage/$maxPage gotten:" -PercentComplete ([float]$currentPage/[float]$maxPage)
             Invoke-WebRequest2 -Uri "${Uri}?page=$currentPage" -IgnorePages
         }
     }

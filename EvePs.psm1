@@ -17,141 +17,14 @@ Param(
     [switch]$ClearCache
 )
 
+Import-Module .\EsiWeb.psm1
+Import-Module .\EvePsData.psm1
+Import-Module .\EvePsUtil.psm1
+
+$ErrorActionPreference = "Stop"
+
 if (-not (Test-Path "$PSScriptRoot\secrets.ps1")) {
     throw "Please create secrets.ps1"
-}
-
-Import-Module .\EsiWeb.psm1
-
-[System.Net.ServicePointManager]::SecurityProtocol = "Tls12"
-
-function Test-Variable {
-    [CmdletBinding()]
-    Param(
-        [parameter(Mandatory)]
-        [string]$Name,
-        [parameter()]
-        [string]$Scope="Local"
-    )
-
-    $variables = Get-Variable -Scope $Scope | Where-Object { $_.Name -eq $Name }
-    if ($variables) {
-        return $true
-    }
-    $false
-}
-
-function ConvertTo-UrlBase64String {
-    [CmdletBinding()]
-    Param(
-        [parameter(ValueFromPipeline)]
-        [Object]$InputObject
-    )
-
-    Begin {
-        $objects = @()
-    }
-
-    Process {
-        $objects += $InputObject
-    }
-
-    End {
-        [System.Convert]::ToBase64String($objects).TrimEnd("=").Replace("+","-").Replace("/","_")
-    }
-
-}
-
-function ConvertTo-Sha256Sum {
-    [CmdletBinding()]
-    Param(
-        [parameter(ValueFromPipeline)]
-        [Object]$InputObject
-    )
-
-    Begin {
-        $objects = @()
-    }
-
-    Process {
-        $objects += $InputObject
-    }
-
-    End {
-        try {
-            $hasher = [System.Security.Cryptography.SHA256]::Create()
-            $hasher.ComputeHash($objects)
-        }
-        finally {
-            $hasher.Dispose()
-        }
-    }
-
-}
-
-function ConvertTo-Utf8String {
-    [CmdletBinding()]
-    Param(
-        [parameter(ValueFromPipeline)]
-        [Object]$InputObject
-    )
-
-    Begin {
-        $objects = @()
-    }
-    
-    Process {
-        $objects += $InputObject
-    }
-
-    End {
-        [System.Text.Encoding]::UTF8.GetBytes($objects)
-    }
-}
-
-function Get-RandomByte {
-    [CmdletBinding()]
-    Param(
-        [parameter(Mandatory)]
-        [int]$Count
-    )
-
-    1..$Count | ForEach-Object {
-        [byte](Get-Random -Max 256)
-    }
-}
-
-function ConvertTo-UrlEncodedString {
-    [CmdletBinding()]
-    Param(
-        [parameter(Mandatory,ValueFromPipeline)]
-        [string]$InputObject
-    )
-
-    [uri]::EscapeDataString($InputObject)
-}
-
-function Get-ChallengeCode {
-    [CmdletBinding()]
-    Param(
-    )
-
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
-
-    #$characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-    $output = New-Object -Type PSObject
-
-    $challenge = Get-RandomByte -Count 32
-    $challenge = $challenge | ConvertTo-UrlBase64String
-    $output | Add-Member -Type NoteProperty -Name "Verifier" -Value $challenge
-    Write-Debug "Verifier: $challenge"
-    $challenge = $challenge | ConvertTo-Utf8String
-    $challenge = $challenge | ConvertTo-Sha256Sum
-    $challenge = $challenge | ConvertTo-UrlBase64String
-    $output | Add-Member -Type NoteProperty -Name "Challenge" -Value $challenge
-    Write-Debug "Challenge: $challenge"
-    $output
 }
 
 function Start-OAuthListener {
@@ -433,19 +306,144 @@ function Get-EsiCategory {
     $results
 }
 
+#function Add-EsiGroup {
+#    [CmdletBinding()]
+#    Param(
+#        [parameter(Mandatory)]
+#        [Object]$SqliteConnection,
+#        [parameter(ValueFromPipelineByPropertyName)]
+#        [int]$CategoryId,
+#        [parameter(ValueFromPipelineByPropertyName)]
+#        [int]$GroupId,
+#        [parameter(ValueFromPipelineByPropertyName)]
+#        [string]$Name,
+#        [parameter(ValueFromPipelineByPropertyName)]
+#        [bool]$Published
+#    )
+#
+#    Invoke-SqliteQuery -SQLiteConnection $SqliteConnection -Query "
+#        INSERT INTO [group] (
+#            CategoryId,
+#            GroupId,
+#            Name,
+#            Published
+#        ) VALUES (
+#            @CategoryId,
+#            @GroupId,
+#            @Name,
+#            @Published);" -SqlParameters @{
+#                "CategoryId"=$CategoryId
+#                "GroupId"=$GroupId
+#                "Name"=$Name
+#                "Published"=$Published
+#            }
+#}
+
+function Sync-EsiGroup {
+    [CmdletBinding()]
+    Param(
+        [parameter()]
+        [switch]$Clobber
+        # Useful for debugging PoshRSJob
+        #[parameter()]
+        #[int]$Limit
+    )
+    $connection = Open-EvePsDataConnection
+
+    try {
+        $transaction = $connection.BeginTransaction()
+        $global:EvePsSqliteTransactions += $transaction
+
+        if ($Clobber) {
+            Invoke-SqliteQuery -SqliteConnection $connection -Query "
+                DROP TABLE IF EXISTS [group];"
+        }
+
+        Invoke-SqliteQuery -SqliteConnection $connection -Query "
+            CREATE TABLE IF NOT EXISTS [group] (
+                CategoryId INTEGER,
+                GroupId INTEGER PRIMARY KEY,
+                Name STRING,
+                Published INTEGER);
+                "
+
+        $groupIds = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/"
+        $evePsModulePath = Get-Module EvePs | Select-Object -Expand Path
+
+        #if ($Limit) {
+        #    $groupIds = $groupIds | Select-Object -First $Limit
+        #}
+
+        $baseUri = $global:EsiBaseUri
+        $groupIds | Start-RSJob -Throttle 100 -ModulesToImport $evePsModulePath -ScriptBlock {
+            $global:EvePsSqliteConnection = $using:connection
+            $group = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/$_/"
+            Invoke-SqliteQuery -SQLiteConnection $using:connection -Query "
+                INSERT OR REPLACE INTO [group] (
+                    CategoryId,
+                    GroupId,
+                    Name,
+                    Published
+                ) VALUES (
+                    @CategoryId,
+                    (SELECT GroupId FROM [group] WHERE GroupId = @GroupId),
+                    @Name,
+                    @Published);" -SqlParameters @{
+                        "CategoryId"=$group.CategoryId
+                        "GroupId"=$group.GroupId
+                        "Name"=$group.Name
+                        "Published"=$group.Published
+                    }
+        } | Wait-RSJob -ShowProgress | Receive-RSJob
+
+        $transaction.Commit()
+        $transaction = $null
+    }
+    catch {
+        if ($transaction) {
+            $transaction.Rollback()
+            $transaction = $null
+        }
+        throw
+    }
+    finally {
+        if ($transaction) {
+            $transaction.Rollback()
+        }
+    }
+}
+
 function Get-EsiGroup {
     [CmdletBinding()]
     Param(
         [parameter()]
-        [string]$Name="*"
+        [string]$Name="*",
+        [parameter()]
+        [switch]$SerialExecution,
+        [parameter()]
+        [int]$Limit
     )
 
     Process {
+        $now = Get-Date
         $groupIds = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/"
+        if ($Limit) {
+            $groupIds = $groupIds | Select-Object -First $Limit
+        }
 
-        $groupIds | Start-RSJob -ModulesToImport $pwd\EsiWeb.psm1 -Throttle 100 -ScriptBlock {
-            Invoke-WebRequest2 -Uri "$using:EsiBaseUri/universe/groups/$_/"
-        } | Wait-RSJob -ShowProgress | Receive-RSJob | Where-Object { $_.Name -like $Name }
+        if ($SerialExecution) {
+            $groupIds | ForEach-Object {
+                Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/$_/" -Verbose
+            } | Wait-RSJob -ShowProgress | Receive-RSJob | Where-Object { $_.Name -like $Name }
+        }
+        else {
+            $evePsModulePath = Get-Module EvePs | Select-Object -Expand Path
+            $sqliteConnection = $global:EvePsSqliteConnection
+            $groupIds | Start-RSJob -Throttle 1 -ModulesToImport $evePsModulePath -ScriptBlock {
+                $global:EvePsSqliteConnection = $using:EvePsSqliteConnection
+                Invoke-WebRequest2 -Uri "$using:EsiBaseUri/universe/groups/$_/" -Verbose
+            } | Wait-RSJob -ShowProgress | Receive-RSJob | Where-Object { $_.Name -like $Name }
+        }
     }
 }
 
@@ -562,18 +560,15 @@ function New-EsiMarketOrderSearch {
     }
 }
 
-function Create-EsiSavedMarketOrderTable {
+function New-EsiSavedMarketOrderTable {
     [CmdletBinding()]
     Param(
         [parameter()]
-        [string]$DataSource="saved.sqlite",
-        [parameter()]
         [switch]$Clobber
     )
-    $DataSource = Resolve-Path $DataSource
     if ($Clobber) {
-    Invoke-SqliteQuery -DataSource $DataSource -Query "
-        DROP TABLE IF EXISTS market_order;"
+        Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
+            DROP TABLE IF EXISTS market_order;"
     }
 
     # Note: If you use only INT, it will wrap a long int big enough to a
@@ -585,7 +580,7 @@ function Create-EsiSavedMarketOrderTable {
     #
     # I still can't believe I got all the types right here without
     # documentation.
-    Invoke-SqliteQuery -DataSource $DataSource -Query "
+    Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
         CREATE TABLE IF NOT EXISTS market_order (
             OrderId INTEGER PRIMARY KEY,
             Duration INTEGER,
@@ -634,17 +629,14 @@ function Save-EsiMarketOrder {
         [parameter(ValueFromPipelineByPropertyName)]
         [int]$VolumeRemain,
         [parameter(ValueFromPipelineByPropertyName)]
-        [int]$VolumeTotal,
-        [parameter()]
-        [string]$DataSource="saved.sqlite"
+        [int]$VolumeTotal
     )
     Begin {
-        $DataSource = Resolve-Path $DataSource
-        Create-EsiSavedMarketOrderTable -DataSource $DataSource
+        New-EsiSavedMarketOrderTable
     }
 
     Process {
-        Invoke-SqliteQuery -DataSource $DataSource -Query "
+        Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
             INSERT OR REPLACE INTO market_order (
                 OrderId,
                 Duration,
@@ -694,19 +686,15 @@ function Save-EsiMarketOrder {
     }
 }
 
-function Create-EsiMarketOrderRelation {
+function New-EsiMarketOrderRelation {
     [CmdletBinding()]
     Param(
-        [parameter()]
-        [string]$DataSource="saved.sqlite",
         [parameter()]
         [switch]$Clobber
     )
 
-    $DataSource = Resolve-Path $DataSource
-
     if ($Clobber) {
-        Invoke-SqliteQuery -DataSource $DataSource -Query "
+        Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
             DROP TABLE IF EXISTS station;
             DROP TABLE IF EXISTS system;
             DROP TABLE IF EXISTS constellation;
@@ -714,7 +702,7 @@ function Create-EsiMarketOrderRelation {
             "
     }
 
-    Invoke-SqliteQuery -DataSource $DataSource -Query "
+    Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
         CREATE TABLE IF NOT EXISTS station (
             MaxDockableShipVolume DECIMAL,
             Name STRING,
@@ -753,17 +741,14 @@ function Create-EsiMarketOrderRelation {
 function Sync-EsiMarketOrderRelation {
     [CmdletBinding()]
     Param(
-        [parameter()]
-        [string]$DataSource="saved.sqlite"
     )
 
-    $DataSource = Resolve-Path $DataSource
-    $stationIds = Invoke-SqliteQuery -DataSource $DataSource -Query "
+    $stationIds = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
         SELECT DISTINCT LocationId FROM market_order;" | Select-Object -Expand LocationId
     foreach ($stationId in $stationIds) {
         $station = Get-EsiStation -StationId $stationId
         $dataTable = $station | Select-Object MaxDockableShipVolume,Name,OfficeRentalCost,Owner,RaceId,ReprocessingEfficiency,ReprocessingStationsTake,StationId,SystemId,TypeId | Out-DataTable
-        Invoke-SqliteBulkCopy -DataTable $dataTable -DataSource $DataSource -Table "station" -Confirm
+        Invoke-SqliteBulkCopy -DataTable $dataTable -SqliteConnection $global:EvePsSqliteConnection -Table "station" -Confirm
     }
         #$constellationId = $system.ConstellationId
         #$constellation = Get-EsiConstellation -ConstellationId $constellationId
@@ -783,22 +768,18 @@ function Search-EsiMarketGap {
     [CmdletBinding()]
     Param(
         [parameter()]
-        [string]$DataSource="saved.sqlite",
-        [parameter()]
         [decimal]$Tax=0.08,
         [parameter()]
         [string]$BuyFrom="*"
     )
 
-    $DataSource = Resolve-Path $DataSource
-
-    $typeNames = Invoke-SqliteQuery -DataSource $DataSource -Query "
+    $typeNames = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
         SELECT DISTINCT mo.TypeName
         FROM market_order mo
         ORDER BY mo.TypeName;" | Select-Object -Expand TypeName
 
     foreach ($typeName in $typeNames) {
-        $buyOrders = Invoke-SqliteQuery -DataSource $DataSource -Query "
+        $buyOrders = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
             SELECT mo.TypeName, mo.Price, mo.VolumeRemain, mo.LocationId AS StationId
             FROM market_order mo
             WHERE mo.IsBuyOrder = 1
@@ -817,7 +798,7 @@ function Search-EsiMarketGap {
                     $station
                 }
             }
-        $sellOrders = Invoke-SqliteQuery -DataSource $DataSource -Query "
+        $sellOrders = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
             SELECT mo.TypeName, mo.Price, mo.VolumeRemain, mo.LocationId AS StationId
             FROM market_order mo
             WHERE mo.IsBuyOrder = 0
@@ -878,7 +859,7 @@ function Invoke-Test {
 #Import-Module PSSQLite
 #
 #$dataSource = "$pwd\sqlite-latest.sqlite"
-#$typeIds = Invoke-SqliteQuery -DataSource $dataSource -Query "
+#$typeIds = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
 #    -- Get salvaged materials IDs
 #    SELECT it.typeID
 #    FROM invTypes it
@@ -892,7 +873,7 @@ function Invoke-Test {
 #        AND img.marketGroupName = 'Salvaged Materials'
 #    ORDER BY it.typeID;"
 #
-#$tradeHubs = Invoke-SqliteQuery -DataSource $dataSource -Query "
+#$tradeHubs = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
 #    SELECT regionID, solarSystemID, solarSystemName
 #    FROM mapSolarSystems mss
 #    WHERE solarSystemName IN ('Jita', 'Amarr', 'Rens', 'Dodixie', 'Hek');"
