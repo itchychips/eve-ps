@@ -437,34 +437,18 @@ function Sync-EsiGroup {
 function Get-EsiGroup {
     [CmdletBinding()]
     Param(
-        [parameter()]
-        [string]$Name="*",
-        [parameter()]
-        [switch]$SerialExecution,
-        [parameter()]
-        [int]$Limit
+        [parameter(ValueFromPipeline,ValueFromPipelineByPropertyName)]
+        [string]$Name="*"
     )
 
     Process {
-        $now = Get-Date
-        $groupIds = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/"
-        if ($Limit) {
-            $groupIds = $groupIds | Select-Object -First $Limit
-        }
-
-        if ($SerialExecution) {
-            $groupIds | ForEach-Object {
-                Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/$_/" -Verbose
-            } | Wait-RSJob -ShowProgress | Receive-RSJob | Where-Object { $_.Name -like $Name }
-        }
-        else {
-            $evePsModulePath = Get-Module EvePs | Select-Object -Expand Path
-            $sqliteConnection = $global:EvePsSqliteConnection
-            $groupIds | Start-RSJob -Throttle 1 -ModulesToImport $evePsModulePath -ScriptBlock {
-                $global:EvePsSqliteConnection = $using:EvePsSqliteConnection
-                Invoke-WebRequest2 -Uri "$using:EsiBaseUri/universe/groups/$_/" -Verbose
-            } | Wait-RSJob -ShowProgress | Receive-RSJob | Where-Object { $_.Name -like $Name }
-        }
+        $connection = Open-EvePsDataConnection
+        Invoke-SqliteQuery -SqliteConnection $connection -Query "
+            SELECT GroupId,
+                CategoryId,
+                Name,
+                Published
+            FROM [group];" | Where-Object { $_.Name -like $Name }
     }
 }
 
