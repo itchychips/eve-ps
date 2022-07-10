@@ -24,7 +24,7 @@ GUID = 'cf80d5d3-4560-4c6c-8fe0-8425686c9f8d'
 Author = 'Donny Johnson'
 
 # Company or vendor of this module
-CompanyName = 'Unknown'
+CompanyName = ''
 
 # Copyright statement for this module
 Copyright = 'Copyright (c) 2022 Donny Johnson.  See COPYING.adoc for licensing.'
@@ -104,10 +104,10 @@ PrivateData = @{
         # Tags = @()
 
         # A URL to the license for this module.
-        # LicenseUri = ''
+        LicenseUri = 'https://www.gnu.org/licenses/agpl-3.0.txt'
 
         # A URL to the main website for this project.
-        # ProjectUri = ''
+        ProjectUri = 'https://github.com/itchychips/eve-ps'
 
         # A URL to an icon representing this module.
         # IconUri = ''
