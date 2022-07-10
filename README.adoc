@@ -25,3 +25,11 @@ Overall steps:
 After that, you should be A-OK to run the commands.
 
 To login, run `Invoke-EsiLogin`.
+
+== Other tries
+
+I tried using https://github.com/Azure/autorest[AutoRest], but it had compile issues after generating from the https://esi.evetech.net/latest/swagger.json[swagger file].
+
+I also attempted to use the swagger directly to write out PowerShell cmdlets, but I have a feeling I need to go through a few manual endpoint adds before I get the flow of the format.  Would reduce a lot of labor, though, and I am having too much fun hand-writing it all.
+
+I could also probably use the ESI.NET library, but it's fun writing the code.
