@@ -17,9 +17,9 @@ Param(
     [switch]$ClearCache
 )
 
-Import-Module .\EsiWeb.psm1
-Import-Module .\EvePsData.psm1
-Import-Module .\EvePsUtil.psm1
+Import-Module $PSScriptRoot\EsiWeb.psm1
+Import-Module $PSScriptRoot\EvePsData.psm1
+Import-Module $PSScriptRoot\EvePsUtil.psm1
 
 $ErrorActionPreference = "Stop"
 
@@ -339,101 +339,6 @@ function Get-EsiCategory {
 #            }
 #}
 
-function Sync-EsiGroup {
-    [CmdletBinding()]
-    Param(
-        [parameter()]
-        [switch]$Clobber
-        # Useful for debugging PoshRSJob
-        #[parameter()]
-        #[int]$Limit
-    )
-    $connection = Open-EvePsDataConnection
-
-    try {
-        $transaction = $connection.BeginTransaction()
-        $global:EvePsSqliteTransactions += $transaction
-
-        if ($Clobber) {
-            Invoke-SqliteQuery -SqliteConnection $connection -Query "
-                DROP TABLE IF EXISTS [group];"
-        }
-
-        Invoke-SqliteQuery -SqliteConnection $connection -Query "
-            CREATE TABLE IF NOT EXISTS [group] (
-                CategoryId INTEGER,
-                GroupId INTEGER PRIMARY KEY,
-                Name STRING,
-                Published INTEGER);"
-
-        $groupIds = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/"
-        $uniqueGroupIds = $groupIds | Select-Object -Unique
-        $compared = Compare-Object -ReferenceObject $uniqueGroupIds -DifferenceObject $groupIds
-        $compared | ForEach-Object {
-            Write-Warning "Duplicate group ID: $_"
-        }
-        Write-Verbose "Got $($groupIds.Count) group IDs."
-        $evePsModulePath = Get-Module EvePs | Select-Object -Expand Path
-
-        # Useful for debugging PoshRSJob
-        #if ($Limit) {
-        #    $groupIds = $groupIds | Select-Object -First $Limit
-        #}
-
-        $baseUri = $global:EsiBaseUri
-        $jobs = $groupIds | Start-RSJob -Throttle 100 -ModulesToImport $evePsModulePath -ScriptBlock {
-            $global:EvePsSqliteConnection = $using:connection
-            $group = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/groups/$_/"
-            # INSERT OR REPLACE for some reason didn't insert all the IDs, so
-            # we use the UPSERT syntax instead.
-            Invoke-SqliteQuery -SQLiteConnection $using:connection -Query "
-                INSERT INTO [group] (
-                    CategoryId,
-                    GroupId,
-                    Name,
-                    Published
-                ) VALUES (
-                    @CategoryId,
-                    @GroupId,
-                    @Name,
-                    @Published)
-                ON CONFLICT(GroupId) DO
-                UPDATE SET
-                    CategoryId=@CategoryId,
-                    Name=@Name,
-                    Published=@Published;" -SqlParameters @{
-                        "CategoryId"=$group.CategoryId
-                        "GroupId"=$group.GroupId
-                        "Name"=$group.Name
-                        "Published"=$group.Published
-                    }
-        }
-        Write-Verbose "Started $($jobs.Count) jobs."
-        $jobs = $jobs | Wait-RSJob -ShowProgress
-        $jobs | Receive-RSJob
-        $jobs | Remove-RSJob
-
-        $transaction.Commit()
-        $transaction = $null
-        $count = Invoke-SqliteQuery -SqliteConnection $connection -Query "
-            SELECT COUNT(*) AS Count
-            FROM [group];" | Select-Object -Expand Count
-        Write-Verbose "There are now $count group IDs into database."
-    }
-    catch {
-        if ($transaction) {
-            $transaction.Rollback()
-            $transaction = $null
-        }
-        throw
-    }
-    finally {
-        if ($transaction) {
-            $transaction.Rollback()
-        }
-    }
-}
-
 function Get-EsiGroup {
     [CmdletBinding()]
     Param(
@@ -449,35 +354,6 @@ function Get-EsiGroup {
                 Name,
                 Published
             FROM [group];" | Where-Object { $_.Name -like $Name }
-    }
-}
-
-function Get-EsiType {
-    [CmdletBinding()]
-    Param(
-        [parameter(ValueFromPipelineByPropertyName,ValueFromPipeline)]
-        [int[]]$Types,
-        [parameter()]
-        [string]$Name="*",
-        [parameter()]
-        [int]$Count
-    )
-
-    Begin {
-        $progressCount = 0
-    }
-
-    Process {
-        if (-not $Types) {
-            $Types = Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/types/"
-        }
-        $Types | ForEach-Object {
-            Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/types/$_/"
-            if ($Count) {
-                Write-Progress -Activity "Getting EsiType" -Status "Got $progressCount/$Count" -PercentComplete ($progressCount / $Count)
-            }
-            $progressCount++
-        }
     }
 }
 
@@ -743,31 +619,31 @@ function New-EsiMarketOrderRelation {
         );"
 }
 
-function Sync-EsiMarketOrderRelation {
-    [CmdletBinding()]
-    Param(
-    )
-
-    $stationIds = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
-        SELECT DISTINCT LocationId FROM market_order;" | Select-Object -Expand LocationId
-    foreach ($stationId in $stationIds) {
-        $station = Get-EsiStation -StationId $stationId
-        $dataTable = $station | Select-Object MaxDockableShipVolume,Name,OfficeRentalCost,Owner,RaceId,ReprocessingEfficiency,ReprocessingStationsTake,StationId,SystemId,TypeId | Out-DataTable
-        Invoke-SqliteBulkCopy -DataTable $dataTable -SqliteConnection $global:EvePsSqliteConnection -Table "station" -Confirm
-    }
-        #$constellationId = $system.ConstellationId
-        #$constellation = Get-EsiConstellation -ConstellationId $constellationId
-        #$region = Get-EsiRegion -RegionId $constellation.RegionId
-}
-
-function Get-EsiStation {
-    [CmdletBinding()]
-    Param(
-        [parameter(Mandatory)]
-        [int]$StationId
-    )
-    Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/stations/$StationId/"
-}
+#function Sync-EsiMarketOrderRelation {
+#    [CmdletBinding()]
+#    Param(
+#    )
+#
+#    $stationIds = Invoke-SqliteQuery -SqliteConnection $global:EvePsSqliteConnection -Query "
+#        SELECT DISTINCT LocationId FROM market_order;" | Select-Object -Expand LocationId
+#    foreach ($stationId in $stationIds) {
+#        $station = Get-EsiStation -StationId $stationId
+#        $dataTable = $station | Select-Object MaxDockableShipVolume,Name,OfficeRentalCost,Owner,RaceId,ReprocessingEfficiency,ReprocessingStationsTake,StationId,SystemId,TypeId | Out-DataTable
+#        Invoke-SqliteBulkCopy -DataTable $dataTable -SqliteConnection $global:EvePsSqliteConnection -Table "station" -Confirm
+#    }
+#        #$constellationId = $system.ConstellationId
+#        #$constellation = Get-EsiConstellation -ConstellationId $constellationId
+#        #$region = Get-EsiRegion -RegionId $constellation.RegionId
+#}
+#
+#function Get-EsiStation {
+#    [CmdletBinding()]
+#    Param(
+#        [parameter(Mandatory)]
+#        [int]$StationId
+#    )
+#    Invoke-WebRequest2 -Uri "$EsiBaseUri/universe/stations/$StationId/"
+#}
 
 function Search-EsiMarketGap {
     [CmdletBinding()]

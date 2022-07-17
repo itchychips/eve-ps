@@ -1,0 +1,47 @@
+= HACKING
+
+This document tries to list overall comments on the code.  If something seems weird or repetitive, check here first.
+
+== SQLite usage
+
+=== Background
+
+The https://github.com/RamblingCookieMonster/PSSQLite[PSSQLite module] is a fairly thin wrapper around the https://system.data.sqlite.org/[System.Data.SQLite library] (which in turn, is a provider for https://docs.microsoft.com/en-us/dotnet/framework/data/adonet/data-providers[ADO.NET]).  This means there are a fair few things we can do to enhance our usage of using a SQLite database, especially transactions to speed up inserts and updates of non-trivial datasets, as well as ensure data consistency.
+
+=== Simple usage of SQLite databases
+It is recommended to use Open-EvePsSqliteConnection to either open a connection or retrieve a current connection for _each_ cmdlet that needs to use the database.
+
+The open connection is also stored in the global `$global:EvePsSqliteConnection`.  This is mainly used for debugging, and should not be used for non-debugging or non-logging purposes beyond the `*-EvePsSqliteConnection` cmdlets that directly interact with it.
+
+For small queries that are read only, `Invoke-SqliteQuery` without opening a transaction suffices.
+
+=== Complex usage of SQLite databases
+
+For larger queries, especially ones that need to populate data (i.e. the `Sync-*` cmdlets in the EvePsData module), a transaction is basically required for any amount of performance, as well as to rollback so we don't populate with bad data.
+
+To do this, we use `Open-EvePsSqliteConnection`, which outputs a SQLiteConnection from System.Data.SQLite, and calling `BeginTransaction()`.  After that, we use a try block.  If _any_ error we cannot recover from occurs, we call `.Dispose()` on the transaction.
+
+Why do we call `.Dispose()`?  Because the `SQLiteTransaction` class in `System.Data.SQLite` does not support nested transactions (confirmed by grokking the source code, as well as https://system.data.sqlite.org/index.html/info?name=0ea44ee9b88696c3d7e468826c96d184d59d5bc5&ln=16[this comment]).  This means the first call to `.Rollback()` will roll back the full transaction (supporting evidence: https://system.data.sqlite.org/index.html/info?name=0ea44ee9b88696c3d7e468826c96d184d59d5bc5&ln=16-156[`SQLTransaction.IssueRollback(bool throwError)`] and https://system.data.sqlite.org/index.html/info?name=5b834847b3395cef6b11b6e4af9f2b0a1ebf59cf&ln=150[`SQLTransactionBase.Rollback()`] which calls `.IssueRollback(true)` to throw).
+
+However, the call to `SQLTransaction.Dispose()` https://system.data.sqlite.org/index.html/info?name=0ea44ee9b88696c3d7e468826c96d184d59d5bc5&ln=62[calls `.IssueRollback(false)`], which does not throw an error, and properly rolls back.
+
+The unfortunate implication of this is that if you fail one transaction, you _must_ fail all transactions.  Currently, because we only call `.Dispose()` in catch blocks and immediately rethrow, we are following this practice.
+
+NOTE: Because there is also a SQLiteTransaction2 class that seems to be a potential https://martinfowler.com/bliki/BranchByAbstraction.html[branch by abstraction], we may be able to use nested transactions.  However, considering how simple this module is intended to be (a fairly thin wrapper around the ESI APIs), I do not believe it would be worthwhile to support it.
+
+In princples of above, the boilerplate for using a connection coupled with a transaction for this project is:
+
+[code,powershell]
+----
+$connection = Open-EvePsSqliteConnection
+$transaction = $connection.BeginTransaction()
+
+try {
+    # Do stuff
+    $transaction.Commit()
+}
+catch {
+    $transaction.Dispose()
+    throw
+}
+----

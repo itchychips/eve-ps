@@ -17,7 +17,7 @@ Param(
     [switch]$ClearCache
 )
 
-Import-Module .\EvePsUtil.psm1
+Import-Module $PSScriptRoot\EvePsUtil.psm1
 
 $global:EsiBaseUri = "https://esi.evetech.net/latest"
 
@@ -27,17 +27,13 @@ Set-StrictMode -Version Latest
 
 [System.Net.ServicePointManager]::SecurityProtocol = "Tls12"
 
-function Clear-Cache {
-    [CmdletBinding()]
+function Register-EsiCache {
     Param(
     )
 
     $connection = Open-EvePsDataConnection
 
     Invoke-SqliteQuery -SqliteConnection $connection -Query "
-        DROP TABLE IF EXISTS cache_web;
-        DROP TABLE IF EXISTS cache_etag;
-
         CREATE TABLE IF NOT EXISTS cache_web (
             CacheWebId INTEGER PRIMARY KEY,
             Uri STRING,
@@ -45,6 +41,29 @@ function Clear-Cache {
             Response STRING,
             Expiry DATETIME
         );"
+}
+
+function Unregister-EsiCache {
+    Param(
+    )
+
+    $connection = Open-EvePsDataConnection
+
+    Invoke-SqliteQuery -SqliteConnection $connection -Query "
+        DROP TABLE IF EXISTS cache_web;"
+}
+
+function Clear-EsiCache {
+    [CmdletBinding()]
+    Param(
+    )
+
+    $connection = Open-EvePsDataConnection
+
+    Register-EsiCache
+
+    Invoke-SqliteQuery -SqliteConnection $connection -Query "
+        DELETE FROM cache_web;"
 
     # Cache using: $Cache[$Uri] = $Expiry
     #$global:CacheExpiry = @{}
@@ -54,10 +73,13 @@ function Clear-Cache {
     #$global:CacheResponse = @{}
 }
 
+function Get-EsiCacheEntry {
+}
+
 $global:LastHeaders = @{}
 
 #if (-not (Test-Path variable:\CacheExpiry) -or $ClearCache) {
-#    Clear-Cache
+#    Clear-EsiCache
 #}
 
 function Convert-PSObjectProperty {
@@ -121,6 +143,9 @@ function Invoke-WebRequest2 {
     $result = $null
 
     $now = Get-Date
+
+    Register-EsiCache
+
     $cacheEntry = Invoke-SqliteQuery -SqliteConnection $connection -Query "
         SELECT CacheWebId, Response, ETag, Expiry
         FROM cache_web
@@ -173,7 +198,12 @@ function Invoke-WebRequest2 {
                     $result = Invoke-WebRequest @params
                 }
                 catch {
-                    if ($_.Exception.Response.StatusCode -eq "NotModified") {
+                    Set-StrictMode -Off
+
+                    if ($_.Exception.GetType().Name -eq "FormatException") {
+                        throw
+                    }
+                    elseif ($_.Exception.Response.StatusCode -eq "NotModified") {
                         throw
                     }
                     elseif ($retryCount -lt 3) {
@@ -193,6 +223,7 @@ function Invoke-WebRequest2 {
             }
         }
         catch {
+            Set-StrictMode -Off
             if ($_.Exception.GetType().Name -eq "UriFormatException") {
                 throw
             }
@@ -233,7 +264,7 @@ function Invoke-WebRequest2 {
             UPDATE cache_web
             SET ETag = @ETag
             WHERE Uri = @Uri;" -SqlParameters @{
-                "ETag"=$result.Headers.ETag
+                "ETag"=$result.Headers.ETag[0]
                 "Uri"=$Uri
             }
     }

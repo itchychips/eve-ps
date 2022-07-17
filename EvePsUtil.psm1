@@ -15,6 +15,8 @@
 Param(
 )
 
+$ErrorActionPreference = "Stop"
+
 function Test-Variable {
     [CmdletBinding()]
     Param(
