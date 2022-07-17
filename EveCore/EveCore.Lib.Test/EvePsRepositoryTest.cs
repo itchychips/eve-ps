@@ -127,6 +127,39 @@ namespace EveCore.Lib.Test
         }
 
         [TestCase]
+        public void TestCategoryGetSpecific()
+        {
+            var connection = new SQLiteConnection("Data Source=:MEMORY:");
+            connection.Open();
+
+            using var system = new EvePsRepository(connection);
+            var count = system.CreateEsiCategoryTable();
+            Assert.That(count, Is.EqualTo(0));
+
+            var fakeCategory = new EsiCategory
+            {
+                CategoryId = 123,
+                Name = "Fake Category",
+                Published = false,
+            };
+
+            var fakeCategory2 = new EsiCategory
+            {
+                CategoryId = 124,
+                Name = "Fake Category2",
+                Published = true,
+            };
+            count = system.InsertEsiCategory(fakeCategory);
+            count = system.InsertEsiCategory(fakeCategory2);
+            var results1 = system.GetEsiCategory(categoryId: 123);
+            var results2 = system.GetEsiCategory(name: "%2");
+            var results3 = system.GetEsiCategory(published: false);
+            Assert.That(results1.Count, Is.EqualTo(1));
+            Assert.That(results2.Count, Is.EqualTo(1));
+            Assert.That(results3.Count, Is.EqualTo(1));
+        }
+
+        [TestCase]
         public void TestCategoryInsertOrUpdate()
         {
             var connection = new SQLiteConnection("Data Source=:MEMORY:");
@@ -240,6 +273,7 @@ namespace EveCore.Lib.Test
 
             count = system.DeleteEsiCategory(fakeCategories[0]);
             Assert.That(count, Is.EqualTo(0));
+
             fakeCategories[0].CategoryId = 124;
 
             count = system.DeleteEsiCategory(fakeCategories[0]);

@@ -11,6 +11,7 @@
 //
 // You should have received a copy of the GNU Affero Public License along with
 // Eve-PS. If not, see <https://www.gnu.org/licenses/>.
+using Dapper;
 using EveCore.Lib.Types;
 using System.Data;
 
@@ -26,121 +27,74 @@ namespace EveCore.Lib
 
         public int CreateEsiCategoryTable()
         {
-            var command = _connection.CreateCommand();
-            command.CommandText = @"
+            return _connection.Execute(@"
                 CREATE TABLE category (
                             CategoryId INTEGER PRIMARY KEY,
                             Name STRING,
                             Published INTEGER
-                        );";
-            return command.ExecuteNonQuery();
+                        );");
         }
 
         public int DropEsiCategoryTable()
         {
-            var command = _connection.CreateCommand();
-            command.CommandText = @"
-                DROP TABLE IF EXISTS category;";
-            return command.ExecuteNonQuery();
+            return _connection.Execute(@"
+                DROP TABLE IF EXISTS category;");
         }
 
         public int DeleteEsiCategoryTable()
         {
-            var command = _connection.CreateCommand();
-            command.CommandText = @"
+            return _connection.Execute(@"
                 DELETE FROM category
-                WHERE 1=1;";
-            return command.ExecuteNonQuery();
+                WHERE 1=1;");
         }
 
         public int DeleteEsiCategory(EsiCategory category)
         {
-            var command = _connection.CreateCommand();
-            command.CommandText = @"
+            var sql = @"
                 DELETE FROM category
                 WHERE CategoryId = @CategoryId";
-            command.AddParameter("CategoryId", category.CategoryId);
-            command.AddWhereParameterLike("Name", category.Name);
-            command.AddWhereParameter("Published", category.Published);
-            return command.ExecuteNonQuery();
+            sql = sql.AddWhereParameter("Name", category.Name);
+            sql = sql.AddWhereParameter("Published", category.Published);
+
+            return _connection.Execute(sql, category);
         }
 
         public IList<EsiCategory> GetEsiCategory(long? categoryId = null, string? name = null, bool? published = null)
         {
-            using var command = _connection.CreateCommand();
-            command.CommandText = @"
+            var sql = @"
                 SELECT categoryId, name, published
                 FROM category
                 WHERE 1=1";
+            sql = sql.AddWhereParameter("CategoryId", categoryId);
+            sql = sql.AddWhereLikeParameter("Name", name);
+            sql = sql.AddWhereParameter("Published", published);
 
-            if (categoryId != null)
+            var searchCategory = new EsiCategory
             {
-                command.CommandText += @"
-                    AND CategoryId = @CategoryId";
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = "CategoryId";
-                parameter.Value = categoryId;
-                command.Parameters.Add(parameter);
-            }
+                CategoryId = categoryId ?? 0,
+                Name = name,
+                Published = published,
+            };
 
-            if (name != null)
-            {
-                command.CommandText += @"
-                    AND Name LIKE @Name";
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = "Name";
-                parameter.Value = name;
-                command.Parameters.Add(parameter);
-            }
+            var output = _connection.Query<EsiCategory>(sql, searchCategory).ToList();
 
-            if (published != null)
-            {
-                command.CommandText += @"
-                    AND Published = @Published";
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = "Published";
-                parameter.Value = published;
-                command.Parameters.Add(parameter);
-            }
-
-            var output = new List<EsiCategory>();
-
-            var reader = command.ExecuteReader();
-            while (reader.Read())
-            {
-                var publishedLong = (long?)reader[2];
-                var publishedBool = publishedLong.HasValue && publishedLong > 0;
-                var item = new EsiCategory
-                {
-                    CategoryId = (long)reader[0],
-                    Name = (string?)reader[1],
-                    Published = publishedBool,
-                };
-                output.Add(item);
-            }
             return output;
         }
 
         public int InsertEsiCategory(EsiCategory category)
         {
-            using var command = _connection.CreateCommand();
-            command.CommandText = @"
+            return _connection.Execute(@"
                 INSERT INTO category (
                     CategoryId, Name, Published
                 ) VALUES (
                     @CategoryId,
                     @Name,
-                    @Published);";
-            command.AddParameter("CategoryId", category.CategoryId);
-            command.AddParameter("Name", category.Name);
-            command.AddParameter("Published", category.Published);
-            return command.ExecuteNonQuery();
+                    @Published);", category);
         }
 
         public int InsertOrUpdateEsiCategory(EsiCategory category)
         {
-            using var command = _connection.CreateCommand();
-            command.CommandText = @"
+            return _connection.Execute(@"
                 INSERT INTO category (
                     CategoryId, Name, Published
                 ) VALUES (
@@ -150,65 +104,23 @@ namespace EveCore.Lib
                 ON CONFLICT (CategoryId) DO
                 UPDATE SET
                     Name = @Name,
-                    Published = @Published;";
-            command.AddParameter("CategoryId", category.CategoryId);
-            command.AddParameter("Name", category.Name);
-            command.AddParameter("Published", category.Published);
-            return command.ExecuteNonQuery();
+                    Published = @Published;", category);
         }
 
         public int UpdateEsiCategory(EsiCategory category)
         {
-            using var command = _connection.CreateCommand();
-            command.CommandText = @"
+            return _connection.Execute(@"
                 UPDATE category
                 SET
                     Name = @Name,
                     Published = @Published
-                WHERE CategoryId = @CategoryId;";
-            command.AddParameter("CategoryId", category.CategoryId);
-            command.AddParameter("Name", category.Name);
-            command.AddParameter("Published", category.Published);
-            return command.ExecuteNonQuery();
+                WHERE CategoryId = @CategoryId;", category);
         }
 
         public void Dispose()
         {
             _connection.Dispose();
             GC.SuppressFinalize(this);
-        }
-    }
-
-    public static class DbCommandExtension
-    {
-        public static void AddWhereParameter(this IDbCommand command, string name, object? value)
-        {
-            if (value == null)
-            {
-                return;
-            }
-            command.CommandText += $@"
-                AND {name} = @{name}";
-            command.AddParameter(name, value);
-        }
-
-        public static void AddWhereParameterLike(this IDbCommand command, string name, string? value)
-        {
-            if (value == null)
-            {
-                return;
-            }
-            command.CommandText += $@"
-                AND {name} LIKE @{name}";
-            command.AddParameter(name, value);
-        }
-
-        public static void AddParameter(this IDbCommand command, string name, object? value)
-        {
-            var parameter = command.CreateParameter();
-            parameter.ParameterName = name;
-            parameter.Value = value;
-            command.Parameters.Add(parameter);
         }
     }
 }
