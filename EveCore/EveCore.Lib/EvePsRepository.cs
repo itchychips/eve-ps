@@ -62,7 +62,7 @@ namespace EveCore.Lib
         public IList<EsiCategory> GetEsiCategory(long? categoryId = null, string? name = null, bool? published = null)
         {
             var sql = @"
-                SELECT categoryId, name, published
+                SELECT CategoryId, Name, Published
                 FROM category
                 WHERE 1=1";
             sql = sql.AddWhereParameter("CategoryId", categoryId);
