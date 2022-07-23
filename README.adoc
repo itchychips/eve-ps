@@ -4,6 +4,8 @@
 
 This is just a bunch of PowerShell cmdlets that interface with https://esi.evetech.net/ui/#/[Eve's ESI].
 
+This also contains a profit calculator, profit.ps1, which does not do any remote calls.  I think some of the calculations are funky.  But it's worked for me so far.
+
 == License
 
 See xref:COPYING.adoc[] for the primary terms of copying for this repository.
