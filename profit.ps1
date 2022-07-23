@@ -14,44 +14,99 @@
 [CmdletBinding()]
 Param(
     [parameter()]
-    [switch]$ProfitCalc
+    [switch]$ProfitCalc,
+    [parameter()]
+    [int]$TaxSkill=0,
+    [parameter()]
+    [float]$CargoCapacity=3000
 )
 
 function Invoke-ProfitCalc {
     [CmdletBinding()]
     Param(
+        [parameter()]
+        [int]$TaxSkill=0,
+        [parameter()]
+        [float]$CargoCapacity=3000
     )
 
     while ($true) {
-        $line = Read-Host -Prompt "command & price"
+        $taxRate = 0.08*(1-0.11*$TaxSkill)
+        $line = Read-Host -Prompt "command & price (tax skill: $TaxSkill)"
         if ($line -eq "q") {
             Write-Host "User quit"
             return
         }
         $split = $line -split " "
-        if ($split.Count -ne 2) {
-            Write-Warning "Must have only 2 values, separated by space (e.g. 'b 5' or 's 6')."
-            continue
-        }
         $command = $split[0]
-        $price = $split[1]
+        $arguments = $split[1..$split.Count]
         if ($command -eq "b") {
+            if ($arguments.Count -gt 1) {
+                Write-Warning "All arguments beyond the first are ignored for this command."
+            }
             # currently a string; need to convert
-            $price = [decimal]$price
+            $arguments[0] = [decimal]$arguments[0]
             # Tax is 0.08; broker fee is 0.0148
-            [decimal]$breakEvenImmediate = $price / (1 - (0.08))
-            [decimal]$breakEvenNonImmediate = $price / (1 - (0.08 + 0.0148))
+            [decimal]$breakEvenImmediate = $arguments[0] / (1 - $taxRate)
+            [decimal]$breakEvenNonImmediate = $arguments[0] / (1 - ($taxRate + 0.0148))
             $formatted = "{0:n3} / {1:n3}" -f $breakEvenImmediate,$breakEvenNonImmediate
             Write-Host "Sell higher than (immediate/non-immediate): $formatted"
         }
         elseif ($command -eq "s") {
+            if ($arguments.Count -gt 1) {
+                Write-Warning "All arguments beyond the first are ignored for this command."
+            }
             # currently a string; need to convert
-            $price = [decimal]$price
+            $arguments[0] = [decimal]$arguments[0]
             # Tax is 0.08; broker fee is 0.0148
-            [decimal]$breakEvenImmediate = $price * (1 - (0.08))
-            [decimal]$breakEvenNonImmediate = $price * (1 - (0.08 + 0.0148))
+            [decimal]$breakEvenImmediate = $arguments[0] * (1 - ($taxRate))
+            [decimal]$breakEvenNonImmediate = $arguments[0] * (1 - ($taxRate + 0.0148))
             $formatted = "{0:n3} / {1:n3}" -f $breakEvenImmediate,$breakEvenNonImmediate
             Write-Host "Buy lower than (immediate/non-immediate): $formatted"
+        }
+        elseif ($command -eq "t") {
+            if ($arguments.Count -gt 1) {
+                Write-Warning "All arguments beyond the first are ignored for this command."
+            }
+            $TaxSkill = $arguments[0]
+            $taxRate = 0.08*(1-0.11*$TaxSkill)
+            Write-Host "Set tax rate to $taxRate"
+        }
+        elseif ($command -eq "c") {
+            if ($arguments.Count -gt 1) {
+                Write-Warning "All arguments beyond the first are ignored for this command."
+            }
+            $CargoCapacity = [float]$arguments[0]
+            Write-Host "Set cargo capacity to $CargoCapacity."
+        }
+        elseif ($command -eq "bsc") {
+            if ($arguments.Count -notin @(3,4)) {
+                Write-Warning "Buy-sell-cargo needs 3 or arguments."
+                continue
+            }
+            [float]$taxRate = 0.08*(1-0.11*$TaxSkill)
+
+            $buyAt = [float]$arguments[0]
+            $sellAt = [float]$arguments[1]
+            $cargoPerUnit = [float]$arguments[2]
+            $overrideMaxItems = [int]$arguments[3]
+
+            if ($overrideMaxItems) {
+                $maxItems = $CargoCapacity / $cargoPerUnit
+                if ($maxItems -gt $overrideMaxItems) {
+                    $maxItems = $overrideMaxItems
+                }
+                $overrideMaxItems = $null
+            }
+            else {
+                $maxItems = $CargoCapacity / $cargoPerUnit
+            }
+            $breakEvenSell = $buyAt / (1 - ($taxRate))
+            $profitPerUnit = $sellAt*(1 - $taxRate) - $breakEvenSell
+            $profitPerM3 = $profitPerUnit / $cargoPerUnit
+            $totalProfit = $profitPerUnit * $maxItems
+            $formatted = "Total profit: {0:n3} ; Profit per cubic meter: {1:n3} ; Profit per unit: {2:n3} ; Total items: {3:n3}" -f $totalProfit,$profitPerM3,$profitPerUnit,$maxItems
+            Write-Host $formatted
         }
         else {
             Write-Warning "Unknown command: $command (try 'b' or 's')"
@@ -60,5 +115,5 @@ function Invoke-ProfitCalc {
 }
 
 if ($ProfitCalc) {
-    Invoke-ProfitCalc
+    Invoke-ProfitCalc -TaxSkill $TaxSkill -CargoCapacity $CargoCapacity
 }
