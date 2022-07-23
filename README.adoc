@@ -32,7 +32,7 @@ To login, run `Invoke-EsiLogin`.
 
 == Known issues
 
-For some reason, tab and menu completion in PowerShell 5 stops working if anything uses PoshRSJob is run.  This problem does not seem to exist in PowerShell 7.  It is therefore recommended to use PowerShell 7.
+For some reason, tab and menu completion in PowerShell stops working if anything uses PoshRSJob is run more than a couple of times.
 
 == Other tries
 
@@ -41,3 +41,9 @@ I tried using https://github.com/Azure/autorest[AutoRest], but it had compile is
 I also attempted to use the swagger directly to write out PowerShell cmdlets, but I have a feeling I need to go through a few manual endpoint adds before I get the flow of the format.  Would reduce a lot of labor, though, and I am having too much fun hand-writing it all.
 
 I could also probably use the ESI.NET library, but it's fun writing the code.
+
+== Other notes
+
+This is currently under a rewrite because PowerShell is just too slow.  I am sure there are ways to speed it up, but threading in PowerShell is still going to be a frustrating chore.
+
+Look in the EveCore directory for the C# rewrite.  It is planned to expose the functionality in cmdlets still, just with C# on the backend.
