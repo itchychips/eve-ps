@@ -19,10 +19,31 @@ using System.Threading.Tasks;
 
 namespace EveCore.Lib.Types
 {
-    public class EsiCategory
+    public class EsiMarketGroup
     {
-        public long CategoryId { get; set; }
+        public long MarketGroupId { get; set; }
+        public string Description { get; set; } = "";
         public string Name { get; set; } = "";
-        public bool Published { get; set; }
+        public long? ParentGroupId { get; set; }
+
+        public override bool Equals(object? o)
+        {
+            return Equals(o as EsiMarketGroup);
+        }
+
+        public bool Equals(EsiMarketGroup? o)
+        {
+            return o != null &&
+                MarketGroupId == o.MarketGroupId &&
+                Description == o.Description &&
+                Name == o.Name &&
+                ParentGroupId == o.ParentGroupId;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(MarketGroupId, Description, Name, ParentGroupId);
+        }
+
     }
 }

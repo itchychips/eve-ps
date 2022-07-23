@@ -18,96 +18,16 @@ using System.Data.SQLite;
 namespace EveCore.Lib.Test
 {
     [TestFixture]
-    public class EvePsRepositoryTest
+    public class EvePsRepository_EsiCategory_Test
     {
         [TestCase]
-        public void TestSqliteMemory()
+        public void Test_Create()
         {
             var connection = new SQLiteConnection("Data Source=:MEMORY:");
             connection.Open();
 
             using var system = new EvePsRepository(connection);
-        }
-
-        [TestCase]
-        public void TestCategoryTableCreate()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-            var count = system.CreateEsiCategoryTable();
-
-            Assert.That(count, Is.EqualTo(0));
-        }
-
-        [TestCase]
-        public void TestCategoryTableDrop()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-
-            var count = system.CreateEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-
-            count = system.DropEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            count = system.DropEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-
-            count = system.CreateEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-
-            count = system.InsertEsiCategory(new EsiCategory { CategoryId = 123 });
-            Assert.That(count, Is.EqualTo(1));
-
-            count = system.DropEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(1));
-        }
-
-        [TestCase]
-        public void TestCategoryTableDelete()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-
-            var count = system.CreateEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            system.DeleteEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            system.DeleteEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            system.DropEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            Assert.Throws<SQLiteException>(() => system.DeleteEsiCategoryTable());
-        }
-
-        [TestCase]
-        public void TestCategoryGetNoData()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-            var count = system.CreateEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-            var results = system.GetEsiCategory();
-
-            Assert.That(results, Is.Empty);
-        }
-
-        [TestCase]
-        public void TestCategoryInsert()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-            var count = system.CreateEsiCategoryTable();
+            var count = system.CreateSchema();
             Assert.That(count, Is.EqualTo(0));
 
             var fakeCategory = new EsiCategory
@@ -127,14 +47,17 @@ namespace EveCore.Lib.Test
         }
 
         [TestCase]
-        public void TestCategoryGetSpecific()
+        public void Test_Read()
         {
             var connection = new SQLiteConnection("Data Source=:MEMORY:");
             connection.Open();
 
             using var system = new EvePsRepository(connection);
-            var count = system.CreateEsiCategoryTable();
+            var count = system.CreateSchema();
             Assert.That(count, Is.EqualTo(0));
+
+            var results = system.GetEsiCategory();
+            Assert.That(results, Is.Empty);
 
             var fakeCategory = new EsiCategory
             {
@@ -159,50 +82,50 @@ namespace EveCore.Lib.Test
             Assert.That(results3.Count, Is.EqualTo(1));
         }
 
+        //[TestCase]
+        //public void Test_CreateOrUpdate()
+        //{
+        //    var connection = new SQLiteConnection("Data Source=:MEMORY:");
+        //    connection.Open();
+
+        //    using var system = new EvePsRepository(connection);
+        //    var count = system.CreateSchema();
+        //    Assert.That(count, Is.EqualTo(0));
+
+        //    var fakeCategory = new EsiCategory
+        //    {
+        //        CategoryId = 123,
+        //        Name = "Fake Category",
+        //        Published = false,
+        //    };
+        //    count = system.InsertOrUpdateEsiCategory(fakeCategory);
+        //    Assert.That(count, Is.EqualTo(1));
+        //    var results = system.GetEsiCategory().ToList();
+
+        //    Assert.That(results.Count, Is.EqualTo(1));
+        //    Assert.That(results[0].Name, Is.EqualTo("Fake Category"));
+        //    Assert.That(results[0].Published, Is.False);
+
+        //    fakeCategory.Name = "Fake Category Renamed";
+        //    fakeCategory.Published = true;
+
+        //    count = system.InsertOrUpdateEsiCategory(fakeCategory);
+        //    Assert.That(count, Is.EqualTo(1));
+        //    results = system.GetEsiCategory().ToList();
+
+        //    Assert.That(results.Count, Is.EqualTo(1));
+        //    Assert.That(results[0].Name, Is.EqualTo("Fake Category Renamed"));
+        //    Assert.That(results[0].Published, Is.True);
+        //}
+
         [TestCase]
-        public void TestCategoryInsertOrUpdate()
+        public void Test_Update()
         {
             var connection = new SQLiteConnection("Data Source=:MEMORY:");
             connection.Open();
 
             using var system = new EvePsRepository(connection);
-            var count = system.CreateEsiCategoryTable();
-            Assert.That(count, Is.EqualTo(0));
-
-            var fakeCategory = new EsiCategory
-            {
-                CategoryId = 123,
-                Name = "Fake Category",
-                Published = false,
-            };
-            count = system.InsertOrUpdateEsiCategory(fakeCategory);
-            Assert.That(count, Is.EqualTo(1));
-            var results = system.GetEsiCategory();
-
-            Assert.That(results.Count, Is.EqualTo(1));
-            Assert.That(results[0].Name, Is.EqualTo("Fake Category"));
-            Assert.That(results[0].Published, Is.False);
-
-            fakeCategory.Name = "Fake Category Renamed";
-            fakeCategory.Published = true;
-
-            count = system.InsertOrUpdateEsiCategory(fakeCategory);
-            Assert.That(count, Is.EqualTo(1));
-            results = system.GetEsiCategory();
-
-            Assert.That(results.Count, Is.EqualTo(1));
-            Assert.That(results[0].Name, Is.EqualTo("Fake Category Renamed"));
-            Assert.That(results[0].Published, Is.True);
-        }
-
-        [TestCase]
-        public void TestCategoryUpdate()
-        {
-            var connection = new SQLiteConnection("Data Source=:MEMORY:");
-            connection.Open();
-
-            using var system = new EvePsRepository(connection);
-            system.CreateEsiCategoryTable();
+            system.CreateSchema();
 
             var fakeCategory = new EsiCategory
             {
@@ -214,7 +137,7 @@ namespace EveCore.Lib.Test
             var count = system.InsertEsiCategory(fakeCategory);
             Assert.That(count, Is.EqualTo(1));
 
-            var results = system.GetEsiCategory();
+            var results = system.GetEsiCategory().ToList();
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(results[0].CategoryId, Is.EqualTo(123));
             Assert.That(results[0].Name, Is.EqualTo("Fake Category"));
@@ -226,7 +149,7 @@ namespace EveCore.Lib.Test
             count = system.UpdateEsiCategory(fakeCategory);
             Assert.That(count, Is.EqualTo(1));
 
-            results = system.GetEsiCategory();
+            results = system.GetEsiCategory().ToList();
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(results[0].CategoryId, Is.EqualTo(123));
             Assert.That(results[0].Name, Is.EqualTo("Fake Category Renamed"));
@@ -238,7 +161,7 @@ namespace EveCore.Lib.Test
         }
 
         [TestCase]
-        public void TestCategoryDelete()
+        public void Test_Delete()
         {
             var connection = new SQLiteConnection("Data Source=:MEMORY:");
             connection.Open();
@@ -261,22 +184,17 @@ namespace EveCore.Lib.Test
                 },
             };
 
-            system.CreateEsiCategoryTable();
+            system.CreateSchema();
             system.InsertEsiCategory(fakeCategories[0]);
             system.InsertEsiCategory(fakeCategories[1]);
-            var count = system.DeleteEsiCategory(fakeCategories[0]);
+
+            var count = system.DeleteEsiCategory(fakeCategories[0].CategoryId);
             var results = system.GetEsiCategory();
 
             Assert.That(count, Is.EqualTo(1));
             Assert.That(results.Count, Is.EqualTo(1));
-            Assert.That(results[0].CategoryId, Is.EqualTo(124));
 
-            count = system.DeleteEsiCategory(fakeCategories[0]);
-            Assert.That(count, Is.EqualTo(0));
-
-            fakeCategories[0].CategoryId = 124;
-
-            count = system.DeleteEsiCategory(fakeCategories[0]);
+            count = system.DeleteEsiCategory(fakeCategories[0].CategoryId);
             results = system.GetEsiCategory();
             Assert.That(count, Is.EqualTo(0));
             Assert.That(results.Count, Is.EqualTo(1));

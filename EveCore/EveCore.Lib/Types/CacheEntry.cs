@@ -19,10 +19,11 @@ using System.Threading.Tasks;
 
 namespace EveCore.Lib.Types
 {
-    public class EsiCategory
+    public class CacheEntry
     {
-        public long CategoryId { get; set; }
-        public string Name { get; set; } = "";
-        public bool Published { get; set; }
+        public string Uri { get; set; } = "";
+        public string? ETag { get; set; }
+        public string? Response { get; set; }
+        public DateTime? Expiry { get; set; }
     }
 }

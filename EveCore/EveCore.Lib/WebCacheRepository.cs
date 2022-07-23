@@ -11,18 +11,39 @@
 //
 // You should have received a copy of the GNU Affero Public License along with
 // Eve-PS. If not, see <https://www.gnu.org/licenses/>.
+using Dapper;
+using EveCore.Lib.Types;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace EveCore.Lib.Types
+namespace EveCore.Lib
 {
-    public class EsiCategory
+    public class WebCacheRepository
     {
-        public long CategoryId { get; set; }
-        public string Name { get; set; } = "";
-        public bool Published { get; set; }
+        private readonly IDbConnection _connection;
+
+        public WebCacheRepository(IDbConnection connection)
+        {
+            _connection = connection;
+        }
+
+        public int CreateSchema()
+        {
+            return _connection.Execute(@"
+                CREATE TABLE IF NOT EXISTS cache_entry (
+                            Uri TEXT PRIMARY KEY,
+                            ETag TEXT,
+                            Response TEXT,
+                            Expiry TEXT);");
+        }
+
+        public int InsertCacheEntry(CacheEntry entry)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

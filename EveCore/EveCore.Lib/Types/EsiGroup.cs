@@ -19,8 +19,9 @@ using System.Threading.Tasks;
 
 namespace EveCore.Lib.Types
 {
-    public class EsiCategory
+    public class EsiGroup
     {
+        public long GroupId { get; set; }
         public long CategoryId { get; set; }
         public string Name { get; set; } = "";
         public bool Published { get; set; }

@@ -11,18 +11,41 @@
 //
 // You should have received a copy of the GNU Affero Public License along with
 // Eve-PS. If not, see <https://www.gnu.org/licenses/>.
+using EveCore.Lib.Types;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace EveCore.Lib.Types
+namespace EveCore.Lib
 {
-    public class EsiCategory
+    public class EsiRepository : IDisposable
     {
-        public long CategoryId { get; set; }
-        public string Name { get; set; } = "";
-        public bool Published { get; set; }
+        private readonly HttpClient _connection;
+
+        private EsiRepository()
+        {
+            _connection = new HttpClient();
+        }
+
+        public EsiRepository(Uri baseAddress) : this()
+        {
+            _connection.BaseAddress = baseAddress;
+        }
+
+        public IEnumerable<EsiCategory> GetCategories()
+        {
+            throw new NotImplementedException();
+            //var request = new HttpRequestMessage();
+            //request.Headers.Add("a", "b");
+            //_connection.SendAsync();
+        }
+
+        public void Dispose()
+        {
+            _connection.Dispose();
+            GC.SuppressFinalize(this);
+        }
     }
 }
